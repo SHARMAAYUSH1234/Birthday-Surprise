@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Surprise</title>
+<style>
+  :root{
+    --bg1: linear-gradient(180deg,#ffefba,#ffd1dc);
+    --bg2: linear-gradient(180deg,#0f1724,#0b1020);
+    --accent: #ff4b5c;
+    --neon: #7df9ff;
+    --glass: rgba(255,255,255,0.85);
+  }
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;overflow:hidden}
+  body{background:var(--bg1);display:flex;align-items:center;justify-content:center;flex-direction:column;color:#111}
+  /* Header */
+  .stage{position:relative;width:100%;height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:18px}
+  h1{margin:0;font-size:clamp(22px,4vw,44px);color:#fff;text-shadow:0 6px 18px rgba(0,0,0,0.25)}
+  /* Balloons */
+  .balloon{position:absolute;bottom:-200px;border-radius:50% 50% 50% 50%;box-shadow:inset -8px -12px rgba(0,0,0,0.07);opacity:0.95}
+  /* Popup card */
+  .card{backdrop-filter: blur(6px);background:rgba(255,255,255,0.85);padding:18px;border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,0.18);min-width:320px;max-width:90vw;text-align:center}
+  .sub{color:#333;margin-top:6px}
+  input[type=text]{padding:10px 12px;border-radius:10px;border:1px solid rgba(0,0,0,0.08);width:240px;outline:none}
+  button.primary{margin-left:8px;padding:10px 14px;border-radius:10px;border:0;background:var(--accent);color:white;cursor:pointer}
+  /* Terminal area (python feel) */
+  .terminal{width:min(820px,92vw);max-height:44vh;overflow:auto;background:#0b0b0b;color:#9cff9c;padding:18px;border-radius:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,monospace;font-size:14px;box-shadow:0 10px 30px rgba(2,6,23,0.45)}
+  .line{white-space:pre-wrap}
+  .muted{color:rgba(180,180,180,0.7)}
+  .links{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  a.link{display:inline-block;padding:8px 12px;border-radius:10px;background:#111;color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,0.04)}
+  /* Mega theme */
+  .mega-bg{background:var(--bg2) !important;color:white}
+  .mega-neon{color:var(--neon);text-shadow:0 0 16px rgba(125,249,255,0.35)}
+  .hidden{display:none!important}
+  /* Confetti */
+  .confetti-piece{position:fixed;z-index:9999;pointer-events:none;opacity:0;transform:translateY(-50px) rotate(0deg)}
+  /* Mobile adjustments */
+  @media (max-width:520px){
+    .terminal{font-size:13px;padding:12px;max-height:48vh}
+    input[type=text]{width:160px}
+    h1{font-size:28px}
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <!-- Balloons and header -->
+  <div id="balloonContainer" aria-hidden="true"></div>
+
+  <div style="text-align:center">
+    <h1 id="mainTitle">🎉 Happy Birthday! 🎂</h1>
+    <div class="card" id="card">
+      <div style="font-weight:700">A surprise awaits — just scan, open & enjoy!</div>
+      <div class="sub muted">No installs. Just open in the browser.</div>
+      <div style="margin-top:12px">
+        <input id="nameInput" type="text" placeholder="Enter You Name....." />
+        <button class="primary" id="startBtn">Open Surprise</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal / console area -->
+  <div style="margin-top:18px;display:flex;gap:14px;flex-direction:column;align-items:center">
+    <div class="terminal" id="terminal" role="log" aria-live="polite"></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button id="enterBtn" class="primary" style="display:none">Press Enter / Continue</button>
+      <button id="reloadBtn" style="display:none;background:transparent;border:1px solid rgba(0,0,0,0.08);padding:8px 12px;border-radius:8px;cursor:pointer">Restart</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confetti container (dynamically created) -->
+<div id="confettiRoot"></div>
+
+<script>
+/* -------------------------
+   Helper utilities
+   ------------------------- */
+const $ = (sel) => document.querySelector(sel);
+const terminal = $('#terminal');
+const startBtn = $('#startBtn');
+const enterBtn = $('#enterBtn');
+const reloadBtn = $('#reloadBtn');
+const nameInput = $('#nameInput');
+const stage = $('#stage');
+const balloonContainer = $('#balloonContainer');
+
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function rand(min,max){return Math.random()*(max-min)+min;}
+
+/* Typewriter effect for terminal lines */
+async function typeLine(text, speed=30){
+  const line = document.createElement('div');
+  line.className='line';
+  terminal.appendChild(line);
+  terminal.scrollTop = terminal.scrollHeight;
+  for(let i=0;i<text.length;i++){
+    line.textContent += text[i];
+    terminal.scrollTop = terminal.scrollHeight;
+    await sleep(speed);
+  }
+  return line;
+}
+
+/* Create balloons animation */
+function spawnBalloons(count=18){
+  balloonContainer.innerHTML='';
+  const vw = Math.max(document.documentElement.clientWidth || 320);
+  for(let i=0;i<count;i++){
+    const b = document.createElement('div');
+    b.className='balloon';
+    const w = Math.floor(rand(36,72));
+    const h = Math.floor(w*1.25);
+    b.style.width = w + 'px';
+    b.style.height = h + 'px';
+    b.style.left = (rand(3,97)) + 'vw';
+    b.style.background = `linear-gradient(180deg, hsl(${rand(0,360)} 90% 65%), hsl(${rand(0,360)} 80% 45%))`;
+    b.style.animation = `floatUp ${rand(6,14)}s linear ${-rand(0,8)}s infinite`;
+    b.style.bottom = '-220px';
+    b.style.zIndex = 3;
+    b.style.transition = 'transform 0.6s ease';
+    balloonContainer.appendChild(b);
+    // add string
+    const string = document.createElement('div');
+    string.style.position='absolute';
+    string.style.left=b.style.left;
+    string.style.bottom = '-240px';
+    string.style.width='2px';
+    string.style.height='120px';
+    string.style.background='rgba(0,0,0,0.06)';
+    balloonContainer.appendChild(string);
+  }
+  // create keyframes dynamically
+  const style = document.createElement('style');
+  style.innerHTML = `@keyframes floatUp{0%{transform:translateY(0);opacity:1}100%{transform:translateY(-140vh);opacity:0}}`;
+  document.head.appendChild(style);
+}
+
+/* -------------------------
+   Confetti
+   ------------------------- */
+function burstConfetti(amount=50){
+  const root = document.getElementById('confettiRoot');
+  for(let i=0;i<amount;i++){
+    const el = document.createElement('div');
+    el.className='confetti-piece';
+    const size = Math.floor(rand(6,14));
+    el.style.width = size+'px'; el.style.height = (size*0.6)+'px';
+    el.style.left = rand(10,90)+'vw';
+    el.style.top = rand(10,80)+'vh';
+    el.style.background = `hsl(${rand(0,360)} 90% 60%)`;
+    el.style.transform = `rotate(${rand(0,360)}deg)`;
+    root.appendChild(el);
+    // animate
+    const fall = el.animate([
+      { transform: `translateY(-50px) rotate(${rand(0,360)}deg)`, opacity:1 },
+      { transform: `translateY(${rand(80,260)}vh) rotate(${rand(360,720)}deg)`, opacity:1 }
+    ], {duration: rand(1200,2600), easing:'cubic-bezier(.2,.6,.2,1)'});
+    fall.onfinish = ()=> el.remove();
+  }
+}
+
+/* -------------------------
+   Main flow (Python-like feel)
+   ------------------------- */
+let state = {
+  name: '',
+  combos: [],
+  stage: 'idle', // idle -> started -> normalShown -> waitingMega -> megaActive -> done
+  specialNameLower: 'saanvi singhal'
+};
+
+function namePermutations(name){
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if(parts.length <= 1) return [name.trim()];
+  // simple permutations (no duplicates)
+  const results = [];
+  const used = {};
+  function perm(arr, idx=0){
+    if(idx === arr.length){
+      const joined = arr.join(' ');
+      if(!used[joined]) { used[joined]=1; results.push(joined); }
+      return;
+    }
+    for(let i=idx;i<arr.length;i++){
+      [arr[idx],arr[i]]=[arr[i],arr[idx]];
+      perm(arr, idx+1);
+      [arr[idx],arr[i]]=[arr[i],arr[idx]];
+    }
+  }
+  perm(parts.slice());
+  return results;
+}
+
+/* Reset UI for restart */
+function resetAll(){
+  terminal.innerHTML='';
+  state.stage='idle';
+  enterBtn.style.display='none';
+  reloadBtn.style.display='none';
+  stage.classList.remove('mega-bg');
+  $('#mainTitle').classList.remove('mega-neon');
+  spawnBalloons(18);
+}
+
+/* Start the surprise flow */
+async function startFlow(){
+  terminal.innerHTML=''; terminal.scrollTop=0;
+  state.name = (nameInput.value || '').trim() || 'Friend';
+  state.combos = namePermutations(state.name);
+  state.stage = 'started';
+  startBtn.disabled = true;
+  nameInput.disabled = true;
+
+  // Initial terminal lines (typewriter)
+  await typeLine(`>>> import time, itertools`);
+  await typeLine(`>>> name = "${state.name}"`);
+  await sleep(300);
+  await typeLine(`Welcome`);
+  await sleep(200);
+  await typeLine(`Happy Birthday ${state.name}! 🎉`);
+  await sleep(400);
+
+  // List combinations (imitating permutations)
+  await typeLine(`Generating name combinations...`);
+  await sleep(400);
+  for(let i=0;i<state.combos.length;i++){
+    await sleep(120);
+  }
+
+  // Show normal gift
+  state.stage='normalShown';
+  await typeLine(`\nGift ${1}: 🎁 Normal Gift available. [Open Link below]`);
+  const linkNormal = document.createElement('a');
+  linkNormal.href = "https://sharmaayush1234.github.io/HappyBirthdaySaanvi/";
+  linkNormal.target='_blank';
+  linkNormal.className='link';
+  linkNormal.textContent = 'Open Normal Gift';
+  const linkWrap = document.createElement('div');
+  linkWrap.style.marginTop='8px';
+  linkWrap.style.textAlign='center';
+  linkWrap.appendChild(linkNormal);
+  terminal.appendChild(linkWrap);
+  terminal.scrollTop = terminal.scrollHeight;
+
+  // show Enter / Continue button (or keyboard Enter)
+  enterBtn.style.display='inline-block';
+  enterBtn.focus();
+  state.stage='waitingMega';
+  await typeLine(`\nPress Enter or click "Press Enter / Continue" to unlock the MEGA gift...`, 18);
+
+  // wait for user to press enter or click
+  await waitForEnter();
+
+  // Mega activate
+  await typeLine(`\nChecking key...`);
+  await sleep(600);
+  await typeLine(`🎉 Mega Gift Activated! Unlocking...`, 18);
+  state.stage='megaActive';
+
+  // change theme instantly
+  applyMegaTheme();
+
+  // Reveal mega link
+  await sleep(400);
+  await typeLine(`\n--- MEGA GIFT ---`);
+  await typeLine(`Click the mega link below to claim your BIG surprise!`);
+  const megaLink = document.createElement('a');
+  megaLink.href = "https://www.greetingsisland.com/ecard/pcdwdex3tp4e";
+  megaLink.target='_blank';
+  megaLink.className='link';
+  megaLink.textContent = 'Open MEGA Gift';
+  const megaWrap = document.createElement('div');
+  megaWrap.style.marginTop='10px';
+  megaWrap.style.textAlign='center';
+  megaWrap.appendChild(megaLink);
+  terminal.appendChild(megaWrap);
+  terminal.scrollTop = terminal.scrollHeight;
+  burstConfetti(90);
+  await typeLine(`\nEnjoy You Day`, 20);
+
+  // show restart
+  reloadBtn.style.display='inline-block';
+  state.stage='done';
+  startBtn.disabled = false;
+  nameInput.disabled = false;
+}
+
+/* Wait for Enter key or enterBtn click once */
+function waitForEnter(){
+  return new Promise((resolve)=>{
+    function handler(e){
+      if(e.type === 'click' || (e.type === 'keydown' && (e.key === 'Enter'))){
+        cleanup();
+        resolve();
+      }
+    }
+    function cleanup(){
+      enterBtn.removeEventListener('click', handler);
+      window.removeEventListener('keydown', handler);
+    }
+    enterBtn.addEventListener('click', handler);
+    window.addEventListener('keydown', handler);
+  });
+}
+
+/* Theme change for Mega gift */
+function applyMegaTheme(){
+  document.body.classList.add('mega-bg');
+  stage.classList.add('mega-bg');
+  $('#mainTitle').classList.add('mega-neon');
+  // change title text & card hidden
+  $('#mainTitle').textContent = '🎆 MEGA CELEBRATION 🎆';
+  $('#card').classList.add('hidden');
+  // remove old balloons and spawn neon balloons
+  balloonContainer.innerHTML='';
+  spawnBalloons(12);
+  // increase glow
+  document.documentElement.style.setProperty('--accent', '#7df9ff');
+}
+
+/* Event wiring */
+startBtn.addEventListener('click', startFlow);
+reloadBtn.addEventListener('click', ()=>{ resetAll(); });
+window.addEventListener('load', ()=>{
+  spawnBalloons(18);
+  // auto focus name field on mobile
+  setTimeout(()=>nameInput.focus(),450);
+});
+
+/* Allow tapping terminal area to trigger Enter (mobile friendly) */
+terminal.addEventListener('click', ()=>{
+  if(enterBtn.style.display !== 'none'){
+    enterBtn.click();
+  }
+});
+</script>
+</body>
+</html>
